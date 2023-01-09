@@ -30,24 +30,25 @@ class CRB3d(nn.Module):
 
 class VFE(nn.Module):
 
-    def __init__(self, cin, cout):
+    def __init__(self, cin, cout, sampleNum):
         super().__init__()
         self.fcn = FCN(cin, cout)
+        self.sampleNum = sampleNum
 
     def forward(self, x):
         # input shape = (batch, N, 35, cin)
         x = self.fcn(x)
         # shape = (batch, N, 35, cout)
-        s = torch.max(x, dim = 2, keepdim = True)[0].repeat(1, 1, 35, 1)
+        s = torch.max(x, dim = 2, keepdim = True)[0].repeat(1, 1, self.sampleNum, 1)
         # concat on channels
         return torch.concat([x, s], dim = -1)
 
 class SVFE(nn.Module):
 
-    def __init__(self):
+    def __init__(self, sampleNum = 35):
         super().__init__()
-        self.vfe1 = VFE(7, 16)
-        self.vfe2 = VFE(32, 64)
+        self.vfe1 = VFE(7, 16, sampleNum)
+        self.vfe2 = VFE(32, 64, sampleNum)
 
     def forward(self, x):
         x = self.vfe1(x)

@@ -2,14 +2,17 @@ from shapely.geometry import Polygon
 import torch
 import numpy as np
 from .Extension import cpp
+from typing import Sequence, Tuple, Union
 
-def getRotationMatrices(r):
+index3d = Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+
+def getRotationMatrices(r: torch.Tensor):
     rcos = torch.cos(r).reshape((-1, 1))
     rsin = torch.sin(r).reshape((-1, 1))
     rot = torch.concat([rcos, -rsin, rsin, rcos], dim=1).reshape((-1, 2, 2))
     return rot
 
-def bbox3d2bev(bbox3ds):
+def bbox3d2bev(bbox3ds: torch.Tensor) -> torch.Tensor:
     """
     Convert 3d bboxes to bev(in format of corner points)
     @param bbox3ds: (N, 7) in xyzlwhr format
@@ -26,6 +29,16 @@ def bbox3d2bev(bbox3ds):
     res = res @ rot
     res = res + bbox3ds[:, None, [0, 1]]
     return res
+
+def bbox3d2corner(bbox3ds: torch.Tensor) -> torch.Tensor:
+    bevs = bbox3d2bev(bbox3ds)
+    h = bbox3ds[..., [5]]
+    z = bbox3ds[..., [2]]
+    h = torch.tile(h[..., None], (1, 4, 1))
+    z = torch.tile(z[..., None], (1, 4, 1))
+    top = torch.concat([bevs, z + h], dim = 2)
+    bot = torch.concat([bevs, z], dim = 2)
+    return torch.concat([top, bot], dim = 1)
 
 def iou2d(rs1: torch.Tensor, rs2: torch.Tensor):
     """
@@ -59,11 +72,20 @@ def getPolygons(bboxes):
         res[i] = Polygon(p)
     return res
 
-def classifyAnchors(gts, gtCenters, anchors, velorange, negThr, posThr):
+def classifyAnchors(gts: torch.Tensor, gtCenters: torch.Tensor, anchors: torch.Tensor,
+                    velorange: Sequence[float], negThr: float, posThr: float)\
+                    -> Tuple[index3d, index3d, torch.Tensor]:
+    # pos = torch.zeros(anchors.shape[:3], dtype = torch.bool)
+    # neg = torch.zeros(anchors.shape[:3], dtype = torch.bool)
+    # gi = torch.zeros_like(pos, dtype = torch.int64)
     l = (velorange[3] - velorange[0]) / anchors.shape[0]
     w = (velorange[4] - velorange[1]) / anchors.shape[1]
     nls = ((gtCenters[:, 0] - velorange[0] - l / 2) / l + 0.5).long()
     nws = ((gtCenters[:, 1] - velorange[1] - w / 2) / w + 0.5).long()
+    # cpp._classifyAnchors2(gts, anchors, nls, nws, negThr, posThr, pos, neg, gi) # noqa
+    # pi = torch.where(pos)
+    # ni = torch.where(neg)
+    # gi = gi[pi]
     pi, ni, gi = cpp._classifyAnchors(gts, anchors, nls, nws, negThr, posThr) # noqa
     return pi, ni, gi
 
@@ -187,8 +209,11 @@ def classifyAnchors_(gts, gtCenters, anchors, velorange, negThr, posThr):
                     ioul = iou
                 h -= 1
     return pos, neg, gi
+    # pi = torch.where(pos)
+    # ni = torch.where(neg)
+    # return pi, ni, gi[pi]
 
-def bboxCam2Lidar(camBoxes, c2v, inplace = False):
+def bboxCam2Lidar(camBoxes: Union[torch.Tensor, np.ndarray], c2v: Union[torch.Tensor, np.ndarray], inplace: bool = False):
     """
 
     @param inplace:
@@ -209,3 +234,13 @@ def bboxCam2Lidar(camBoxes, c2v, inplace = False):
     camBoxes[:, :3] = xyz[:, :3]
     camBoxes[:, 6] = camBoxes[:, 6] - 0.5 * torch.pi
     return camBoxes
+
+def decodeRegression(regmap: torch.Tensor, anchors: torch.Tensor) -> torch.Tensor:
+    assert regmap.shape == anchors.shape
+    d = torch.sqrt(anchors[..., [0]] ** 2 + anchors[..., [1]] ** 2)
+    res = torch.empty(regmap.shape, device = regmap.device)
+    res[..., :2] = regmap[..., :2] * d + anchors[..., :2]
+    res[..., 2] = regmap[..., 2] * anchors[..., 5] + anchors[..., 2]
+    res[..., 3:6] = torch.exp(regmap[..., 3:6]) * anchors[..., 3:6]
+    res[..., 6] = regmap[..., 6] + anchors[..., 6]
+    return res
