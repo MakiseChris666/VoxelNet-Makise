@@ -15,5 +15,5 @@ carsize:
   - 1.6
   - 1.56
 batchsize: 1
-samplenum: 35
+samplenum: 25
 numthreads: 16

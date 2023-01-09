@@ -50,7 +50,7 @@ class VoxelNet(nn.Module):
 
 device = cfg.device
 dataroot = '../mmdetection3d-master/data/kitti'
-if len(sys.argv) > 1:
+if len(sys.argv) > 1 and sys.argv[1] != '#':
     dataroot = sys.argv[1]
 trainInfoPath = os.path.join(dataroot, 'ImageSets/train.txt')
 testInfoPath = os.path.join(dataroot, 'ImageSets/val.txt')
