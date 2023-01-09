@@ -10,14 +10,12 @@ from modules import Calc, Config as cfg
 dataroot = '../mmdetection3d-master/data/kitti'
 if len(sys.argv) > 1:
     dataroot = sys.argv[1]
-veloroot = os.path.join(dataroot, 'training/velodyne_reduced')
-trainInfoPath = os.path.join(dataroot, 'ImageSets/train.txt')
-testInfoPath = os.path.join(dataroot, 'ImageSets/val.txt')
+veloroot = os.path.join(dataroot, 'training/velodyne')
 labelroot = os.path.join(dataroot, 'training/label_2')
 calibroot = os.path.join(dataroot, 'training/calib')
 
-rangeMin = torch.Tensor(cfg['velorange'][:3])
-rangeMax = torch.Tensor(cfg['velorange'][3:])
+rangeMin = torch.Tensor(cfg.velorange[:3])
+rangeMax = torch.Tensor(cfg.velorange[3:])
 
 def createDataset(splitSet: List[str]) -> \
         Tuple[List[np.ndarray], List[Tuple[torch.Tensor, torch.Tensor]]]:
@@ -32,7 +30,7 @@ def createDataset(splitSet: List[str]) -> \
         print(f'\rProcessing: {i + 1}/{sum}', end = '')
         path = os.path.join(veloroot, s + '.bin')
         velo = np.fromfile(path, dtype = 'float32').reshape((-1, 4))
-        velo = pre.crop(velo, cfg['velorange'])
+        velo = pre.crop(velo, cfg.velorange)
         x.append(velo)
         path = os.path.join(labelroot, s + '.txt')
         labels = pd.read_csv(path, sep = ' ', index_col = 0, usecols = [0, *[_ for _ in range(8, 15)]])

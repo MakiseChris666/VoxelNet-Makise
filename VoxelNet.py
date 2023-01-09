@@ -19,7 +19,7 @@ class VoxelNet(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.svfe = Pipe.SVFE(cfg['samplenum'])
+        self.svfe = Pipe.SVFE(cfg.samplenum)
         self.fcn = Pipe.FCN(128, 128)
         self.cml = Pipe.CML()
         self.rpn = Pipe.RPN()
@@ -27,8 +27,8 @@ class VoxelNet(nn.Module):
     @staticmethod
     def reindex(x, idx):
         # input shape: x = (batch * N, 128), idx = (batch * N, 1 + 3)
-        res = Variable(torch.Tensor(1, 128, cfg['voxelshape'][2], cfg['voxelshape'][0]
-                                    , cfg['voxelshape'][1]).to(device))
+        res = Variable(torch.Tensor(1, 128, cfg.voxelshape[2], cfg.voxelshape[0]
+                                    , cfg.voxelshape[1]).to(device))
         res[idx[:, 0], :, idx[:, 3], idx[:, 1], idx[:, 2]] = x
         return res
 
@@ -44,16 +44,19 @@ class VoxelNet(nn.Module):
         # shape = (batch * N, 128)
         x = self.reindex(x, idx)
         x = self.cml(x)
-        x = x.reshape((1, -1, cfg['voxelshape'][0], cfg['voxelshape'][1]))
+        x = x.reshape((1, -1, cfg.voxelshape[0], cfg.voxelshape[1]))
         score, reg = self.rpn(x)
         return score, reg
 
-device = cfg['device']
+device = cfg.device
 dataroot = '../mmdetection3d-master/data/kitti'
 if len(sys.argv) > 1:
     dataroot = sys.argv[1]
 trainInfoPath = os.path.join(dataroot, 'ImageSets/train.txt')
 testInfoPath = os.path.join(dataroot, 'ImageSets/val.txt')
+
+if cfg.numthreads != -1:
+    torch.set_num_threads(cfg.numthreads)
 
 if __name__ == '__main__':
 
@@ -65,12 +68,12 @@ if __name__ == '__main__':
     trainX, trainY = Load.createDataset(trainSet)
     testX, testY = Load.createDataset(testSet)
 
-    anchors = pre.createAnchors(cfg['voxelshape'][0] // 2, cfg['voxelshape'][1] // 2,
-                                          cfg['velorange'], cfg['carsize'])
+    anchors = pre.createAnchors(cfg.voxelshape[0] // 2, cfg.voxelshape[1] // 2,
+                                          cfg.velorange, cfg.carsize)
     model = VoxelNet()
     anchorBevs = Calc.bbox3d2bev(anchors.reshape((-1, 7)))\
-        .reshape((cfg['voxelshape'][0] // 2, cfg['voxelshape'][1] // 2, 2, 4, 2))
-    # anchorPolygons = Calc.getPolygons(anchorBevs).reshape((cfg['voxelshape'][0] // 2, cfg['voxelshape'][1] // 2, 2))
+        .reshape((cfg.voxelshape[0] // 2, cfg.voxelshape[1] // 2, 2, 4, 2))
+    # anchorPolygons = Calc.getPolygons(anchorBevs).reshape((cfg.voxelshape[0] // 2, cfg.voxelshape[1] // 2, 2))
     criterion = Loss.VoxelLoss()
     opt = torch.optim.Adam(model.parameters(), lr = 0.001)
     # torch.autograd.set_detect_anomaly(True)
@@ -123,8 +126,8 @@ if __name__ == '__main__':
         for i, (x, y) in enumerate(zip(trainX, trainY)):
             # shape = (N, 35, 7)
             st = time.perf_counter()
-            voxel, idx = pre.group(x, cfg['velorange'], cfg['voxelsize'], cfg['samplenum'])
-            # voxel_, idx_ = pre.group_(x, cfg['velorange'], cfg['voxelsize'], 25)
+            voxel, idx = pre.group(x, cfg.velorange, cfg.voxelsize, cfg.samplenum)
+            # voxel_, idx_ = pre.group_(x, cfg.velorange, cfg.voxelsize, 25)
 
             ed = time.perf_counter()
             groupTime += ed - st
@@ -145,9 +148,9 @@ if __name__ == '__main__':
             st = time.perf_counter()
             if y[0] is not None:
                 # gtPolygons = Calc.getPolygons(y[1])
-                # pi, ni, gi = Calc.classifyAnchors_(gtPolygons, y[0][:, [0, 1]], anchorPolygons, cfg['velorange'], 0.45, 0.6)
+                # pi, ni, gi = Calc.classifyAnchors_(gtPolygons, y[0][:, [0, 1]], anchorPolygons, cfg.velorange, 0.45, 0.6)
 
-                pi, ni, gi = Calc.classifyAnchors(y[1], y[0][:, [0, 1]], anchorBevs, cfg['velorange'], 0.45, 0.6)
+                pi, ni, gi = Calc.classifyAnchors(y[1], y[0][:, [0, 1]], anchorBevs, cfg.velorange, 0.45, 0.6)
 
                 # pi = pi.cuda()
                 # ni = ni.cuda()
@@ -176,7 +179,7 @@ if __name__ == '__main__':
             if (i + 1) % 50 == 0:
                 print('\r', groupTime, forwardTime, classifyTime, lossTime, backwardTime, allTime)
 
-            print(f'\r{i + 1}/{len(trainSet)}', 'Classification Loss:', clsLoss.item()
+            print(f'\rEpoch{epoch + lastiter + 1} {i + 1}/{len(trainSet)}', 'Classification Loss:', clsLoss.item()
                   , 'Regression Loss:', 'None' if regLoss is None else regLoss.item(), end = '')
             epoched = time.perf_counter()
             allTime = epoched - epochst

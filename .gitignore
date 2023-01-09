@@ -3,4 +3,5 @@ __pycache__/
 Test.py
 checkpoints/
 check.py
-modules/Utils.py
+Utils.py
+*__pycache__*
